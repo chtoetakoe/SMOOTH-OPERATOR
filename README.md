@@ -14,7 +14,7 @@ We look at 7 years of F1 data (2018-2024) and find out:
 - Does the team (constructor) matter?
 - Can we predict how many points a driver will score?
 
-**Spoiler:** Qualifying position and team strength are the two biggest factors. Our best model (Decision Tree) predicts race points with 85% accuracy (R² = 0.85).
+**Spoiler:** Qualifying position and team strength are the two biggest factors. Our best model (Decision Tree with max_depth=3) predicts race points with R² = 0.53.
 
 ---
 
@@ -25,7 +25,7 @@ We look at 7 years of F1 data (2018-2024) and find out:
 | Qualifying is crucial         | Starting P1-3 gives you median 18 points, P11-20 gives median 0 |
 | Team matters a lot            | Mercedes, Red Bull, Ferrari average 10-15 points per race       |
 | Track type changes everything | Monaco: 67% win from pole, Monza: only 14%                      |
-| Decision Tree wins            | 4x better than Linear Regression for this problem               |
+| Decision Tree wins            | After tuning, beats Linear Regression (R² 0.53 vs 0.52)         |
 
 ---
 
@@ -62,7 +62,6 @@ f1-race-analysis/
 │
 ├── README.md                   # You are here
 ├── DATA_DICTIONARY.md          # What each column means
-├── CONTRIBUTIONS.md            # Who did what
 └── requirements.txt            # Python packages needed
 ```
 
@@ -84,7 +83,7 @@ pip install -r requirements.txt
 
 ### Step 2: Get the data
 
-Download F1 data from [Ergast API](http://ergast.com/mrd/) and put the CSV files in `data/raw/`.
+Download F1 data from [Kaggle](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) and put the CSV files in `data/raw/`.
 
 You need these files:
 
@@ -100,8 +99,6 @@ You need these files:
 2. **02_data_preprocessing.ipynb** - Cleans data and adds new features
 3. **03_eda_visualization.ipynb** - Makes all the charts
 4. **04_machine_learning.ipynb** - Trains and tests the models
-
-**Important:** Run them in order! Each notebook needs the output from the previous one.
 
 ---
 
@@ -119,7 +116,7 @@ You need these files:
 
 - Cleans grid position (grid=0 means unknown, not pole)
 - Creates new features like `position_gain` and `is_podium`
-- Adds historical features (driver's past average points, team strength, etc.)
+- Adds historical features (driver's past average points, team strength)
 - Uses `shift(1)` to avoid data leakage
 - Saves: `processed_f1_2018_2024.csv`
 
@@ -132,10 +129,26 @@ You need these files:
 
 ### Notebook 4: Machine Learning
 
+- Explains why we use Regression (not Classification or Clustering)
 - Splits data by time (2018-2022 for training, 2023-2024 for testing)
 - Trains Linear Regression and Decision Tree models
-- Compares them using MSE, RMSE, MAE, and R²
-- Decision Tree wins with R² = 0.85
+- Tunes Decision Tree to find best max_depth
+- Compares them using R² and MSE
+- Decision Tree (max_depth=3) wins!
+
+---
+
+## Why Regression?
+
+I chose **Regression** because our target variable `points` is a continuous number (0, 1, 2, 4, 6, 8, 10, 12, 15, 18, 25).
+
+| Problem Type   | When to Use             | Our Case                     |
+| -------------- | ----------------------- | ---------------------------- |
+| **Regression** | Predict a NUMBER        | "How many points?" ✅        |
+| Classification | Predict a CATEGORY      | "Will driver win? Yes/No"    |
+| Clustering     | Find GROUPS (no target) | "Which drivers are similar?" |
+
+Since we want to predict the actual number of points, Regression is the right choice.
 
 ---
 
@@ -152,20 +165,33 @@ We didn't just use the raw data. We created new features to help the model:
 | `driver_consistency_past`   | How consistent is the driver? (lower = better) |
 | `constructor_strength_past` | Team's average points in previous races        |
 
-**Important:** All historical features use only PAST data. We never use future information to predict - that would be cheating (data leakage).
+**Important:** All historical features use only PAST data. future information is never used to predict - that would be cheating (data leakage).
 
 ---
 
 ## Model Results
 
-We tested two models:
+tested two models and tuned the Decision Tree:
 
-| Model             | MSE   | RMSE | MAE  | R²   |
-| ----------------- | ----- | ---- | ---- | ---- |
-| Decision Tree     | 39.76 | 6.3  | 3.94 | 0.25 |
-| Linear Regression | 25.81 | 5.08 | 3.60 | 0.51 |
+### Before Tuning
 
-**Winner: Linear Regresion**
+| Model                   | R²    | MSE   |
+| ----------------------- | ----- | ----- |
+| Linear Regression       | 0.515 | 25.82 |
+| Decision Tree (depth=8) | 0.253 | 39.77 |
+
+Decision Tree was overfitting with max_depth=8!
+
+### After Tuning
+
+| Model                       | R²        | MSE       |
+| --------------------------- | --------- | --------- |
+| **Decision Tree (depth=3)** | **0.530** | **25.01** |
+| Linear Regression           | 0.515     | 25.82     |
+
+**Winner: Decision Tree (max_depth=3)**
+
+Why? A shallower tree (depth=3) doesn't overfit. It captures the main patterns without memorizing noise.
 
 ---
 
@@ -173,34 +199,34 @@ We tested two models:
 
 We created these charts (saved in `reports/figures/`):
 
-1. **Points Distribution** - Most drivers score 0 points (right-skewed)
-2. **Average Points by Year** - Stayed around 5 points per race
-3. **Grid vs Points Scatter** - Clear negative correlation
-4. **Grid Bucket Boxplot** - P1-3 vs P4-10 vs P11-20
-5. **Constructor Strength vs Points** - Strong positive correlation
-6. **Driver Consistency vs Points** - Consistent drivers score more
-7. **Top 10 Constructors** - Mercedes, Red Bull, Ferrari on top
-8. **Top 15 Drivers** - Verstappen and Hamilton lead
-9. **Correlation Heatmap** - Which features matter most
-10. **Correlation Bar Chart** - Same info, different view
-11. **Pole Win Rate by Track** - Monaco 67% vs Monza 14%
+**EDA Charts:**
+
+1. Points Distribution - Most drivers score 0 points
+2. Average Points by Year - Stable around 5 points
+3. Grid vs Points Scatter - Clear negative correlation
+4. Grid Bucket Boxplot - P1-3 vs P4-10 vs P11-20
+5. Constructor Strength vs Points - Strong positive correlation
+6. Driver Consistency vs Points
+7. Top 10 Constructors
+8. Top 15 Drivers
+9. Correlation Heatmap
+10. Correlation Bar Chart
+11. Pole Win Rate by Track - Monaco 67% vs Monza 14%
+
+**ML Charts:**
+
+1. R² Comparison
+2. MSE Comparison
+3. Predicted vs Actual
+4. Residuals Analysis
+5. Feature Importance
 
 ---
-
-## What was learned from project
 
 1. **Qualifying is everything** - If you don't qualify well, you probably won't score points
 2. **The car matters** - Even the best driver can't win in a slow car
 3. **Some tracks are special** - At Monaco you can't overtake, at Monza you can
-4. **Simple models work** - Decision Tree with depth 8 beats fancy approaches
+4. **Tuning matters** - Decision Tree went from R²=0.25 to R²=0.53 after tuning
 5. **Time-based splits are important** - Random splits can leak future information
 
 ---
-
-## Limitations
-
-- We only used 2018-2024 data (regulations changed in 2022)
-- Weather data is not included
-- Tire strategy is not included
-- Sprint races are mixed with normal races
-- Some drivers have very few races in the dataset

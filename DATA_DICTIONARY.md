@@ -1,12 +1,12 @@
 # Data Dictionary
 
-This document explains what each column in datasets means.
+This document explains what each column in our datasets means.
 
 ---
 
-## Raw Data
+## Raw Data (from Ergast API)
 
-These are the original files downloaded. They come from the Ergast F1 database.
+These are the original files we downloaded. They come from the Ergast F1 database.
 
 ### races.csv
 
@@ -25,7 +25,7 @@ Information about each Grand Prix race.
 
 ### results.csv
 
-Race results for each driver in each race. This is main table.
+Race results for each driver in each race. This is our main table.
 
 | Column          | Type  | Description                                 | Example       |
 | --------------- | ----- | ------------------------------------------- | ------------- |
@@ -96,9 +96,9 @@ Common status values:
 
 ---
 
-## Processed Data (what was created)
+## Processed Data (what we created)
 
-After cleaning and adding features these datasets were created
+After cleaning and adding features, we created these datasets.
 
 ### f1_base_2018_2024.csv
 
@@ -123,7 +123,7 @@ Created by Notebook 01. Basic merged dataset filtered to 2018-2024.
 
 ### processed_f1_2018_2024.csv
 
-Created by Notebook 02. This is final dataset with all features
+Created by Notebook 02. This is our final dataset with all features.
 
 #### Original Columns (from base dataset)
 
@@ -145,16 +145,16 @@ Created by Notebook 02. This is final dataset with all features
 
 #### Cleaned Columns
 
-| Column     | Type  | Description                                                                                                                                  |
-| ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| grid_clean | float | Grid position with 0 replaced by NaN. This is better for analysis because 0 doesn't mean pole position - it means unknown or pit lane start. |
+| Column     | Type  | Description                                                                                                            |
+| ---------- | ----- | ---------------------------------------------------------------------------------------------------------------------- |
+| grid_clean | float | Grid position with 0 replaced by NaN. This is better because 0 doesn't mean pole - it means unknown or pit lane start. |
 
 #### Race-Level Features (created in Notebook 02)
 
-| Column        | Type  | Description                                                                                                                  |
-| ------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
-| position_gain | float | `grid_clean - positionOrder`. Positive = gained positions during race. Example: Started P10, finished P5 → position_gain = 5 |
-| is_podium     | int   | 1 if finished P1, P2, or P3. 0 otherwise.                                                                                    |
+| Column        | Type  | Description                                                                                                      |
+| ------------- | ----- | ---------------------------------------------------------------------------------------------------------------- |
+| position_gain | float | `grid_clean - positionOrder`. Positive = gained positions. Example: Started P10, finished P5 → position_gain = 5 |
+| is_podium     | int   | 1 if finished P1, P2, or P3. 0 otherwise.                                                                        |
 
 #### Status Flags (created in Notebook 02)
 
@@ -166,26 +166,26 @@ Created by Notebook 02. This is final dataset with all features
 
 #### Historical Features (created in Notebook 02)
 
-These are the most important features. They use **only past data** to avoid data leakage.
+These are the most important features for our ML model. They use **only past data** to avoid data leakage.
 
-| Column                      | Type  | Description                                                                                                                                                                                                                     |
-| --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| driver_races_past           | int   | How many races this driver has done before this race. Example: If this is Hamilton's 300th race, value is 299.                                                                                                                  |
-| driver_avg_points_past      | float | Driver's average points per race BEFORE this race. Calculated using `expanding().mean().shift(1)` so we never use future data.                                                                                                  |
-| driver_consistency_past     | float | Standard deviation of driver's past finishing positions. Lower = more consistent. A driver who always finishes P3-P5 has low consistency (good). A driver who finishes P1 one race and P15 the next has high consistency (bad). |
-| constructor_races_past      | int   | How many races this team has done before this race.                                                                                                                                                                             |
-| constructor_strength_past   | float | Team's average points per race BEFORE this race. High value = strong team like Red Bull or Mercedes.                                                                                                                            |
-| constructor_avg_finish_past | float | Team's average finishing position. Lower = better.                                                                                                                                                                              |
+| Column                      | Type  | Description                                                                       |
+| --------------------------- | ----- | --------------------------------------------------------------------------------- |
+| driver_races_past           | int   | How many races this driver completed before this race.                            |
+| driver_avg_points_past      | float | Driver's average points per race BEFORE this race.                                |
+| driver_consistency_past     | float | Standard deviation of driver's past finishing positions. Lower = more consistent. |
+| constructor_races_past      | int   | How many races this team completed before this race.                              |
+| constructor_strength_past   | float | Team's average points per race BEFORE this race.                                  |
+| constructor_avg_finish_past | float | Team's average finishing position BEFORE this race.                               |
 
 ---
 
-## Understanding the Historical Features
+## Understanding Historical Features
 
 ### Why "past" matters
 
-only use data from BEFORE each race to calculate features. This is super important.
+We only use data from BEFORE each race to calculate features. This is very important.
 
-**Wrong way (data leakage):**
+**Wrong way (causes data leakage):**
 
 ```
 Driver's average points = average of ALL their races
@@ -199,7 +199,7 @@ This is wrong because we're using future races to predict current race.
 Driver's average points = average of races BEFORE this one
 ```
 
-This is correct because we only know past information.
+This is correct because we only know past information when making a prediction.
 
 ### Example
 
@@ -226,34 +226,67 @@ In our code, we use:
 expanding().mean().shift(1)
 ```
 
-- `expanding()` = calculate using all data up to current row
+- `expanding()` = use all data up to current row
 - `mean()` = take the average
-- `shift(1)` = move everything down one row (so current row uses only PAST data)
+- `shift(1)` = move everything down one row
 
-This is the key technique that prevents data leakage.
+This makes sure current row only uses PAST data.
 
 ---
 
 ## Feature Correlations with Points
 
-Based on our EDA (Notebook 03), here's how each feature relates to points:
+From our EDA (Notebook 03), here's how features relate to points:
 
-| Feature                   | Correlation | Meaning                                                |
-| ------------------------- | ----------- | ------------------------------------------------------ |
-| positionOrder             | -0.85       | Strong negative (obvious - position determines points) |
-| is_podium                 | +0.84       | Strong positive (top 3 get lots of points)             |
-| grid_clean                | -0.66       | Strong negative (better qualifying = more points)      |
-| constructor_strength_past | +0.65       | Strong positive (good team = more points)              |
-| driver_avg_points_past    | +0.62       | Strong positive (good driver = more points)            |
-| position_gain             | +0.35       | Moderate positive (gaining positions helps)            |
-| driver_consistency_past   | -0.15       | Weak negative (more consistent = slightly more points) |
+| Feature                   | Correlation | Meaning                                       |
+| ------------------------- | ----------- | --------------------------------------------- |
+| grid_clean                | -0.66       | Better qualifying = more points (strong)      |
+| constructor_strength_past | +0.65       | Good team = more points (strong)              |
+| driver_avg_points_past    | +0.62       | Good driver = more points (strong)            |
+| position_gain             | +0.35       | Gaining positions helps (moderate)            |
+| driver_consistency_past   | -0.15       | More consistent = slightly more points (weak) |
 
 ---
 
-## Notes
+## ML Model Features
 
-- All dates are in YYYY-MM-DD format
-- Points follow F1 scoring: P1=25, P2=18, P3=15, P4=12, P5=10, P6=8, P7=6, P8=4, P9=2, P10=1
-- Fastest lap bonus (+1 point) is included in some races
-- Sprint race points are separate but included in our dataset
-- NaN values mean the data is missing or not applicable
+In Notebook 04, we use these features to predict `points`:
+
+**Numeric Features (6):**
+
+1. grid_clean
+2. driver_avg_points_past
+3. driver_consistency_past
+4. driver_races_past
+5. constructor_strength_past
+6. constructor_races_past
+
+**Categorical Features (1):**
+
+1. constructorName (one-hot encoded)
+
+**Target Variable:**
+
+- points (what we're predicting)
+
+---
+
+## F1 Points System
+
+For reference, here's how F1 points work:
+
+| Position | Points |
+| -------- | ------ |
+| 1st      | 25     |
+| 2nd      | 18     |
+| 3rd      | 15     |
+| 4th      | 12     |
+| 5th      | 10     |
+| 6th      | 8      |
+| 7th      | 6      |
+| 8th      | 4      |
+| 9th      | 2      |
+| 10th     | 1      |
+| 11th+    | 0      |
+
+Plus 1 bonus point for fastest lap (if finishing in top 10).
