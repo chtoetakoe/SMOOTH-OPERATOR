@@ -14,8 +14,6 @@ We look at 7 years of F1 data (2018-2024) and find out:
 - Does the team (constructor) matter?
 - Can we predict how many points a driver will score?
 
-**Spoiler:** Qualifying position and team strength are the two biggest factors. Our best model (Decision Tree with max_depth=3) predicts race points with R² = 0.53.
-
 ---
 
 ## Key Findings
@@ -25,7 +23,7 @@ We look at 7 years of F1 data (2018-2024) and find out:
 | Qualifying is crucial         | Starting P1-3 gives you median 18 points, P11-20 gives median 0 |
 | Team matters a lot            | Mercedes, Red Bull, Ferrari average 10-15 points per race       |
 | Track type changes everything | Monaco: 67% win from pole, Monza: only 14%                      |
-| Decision Tree wins            | After tuning, beats Linear Regression (R² 0.53 vs 0.52)         |
+| Decision Tree wins            | After tuning, beats Linear Regression (R² 0.565 vs 0.515)       |
 
 ---
 
@@ -83,7 +81,7 @@ pip install -r requirements.txt
 
 ### Step 2: Get the data
 
-Download F1 data from [Kaggle](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) and put the CSV files in `data/raw/`.
+Download F1 data from [Kaggle](kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) and put the CSV files in `data/raw/`.
 
 You need these files:
 
@@ -138,9 +136,39 @@ You need these files:
 
 ---
 
+## Preventing Data Leakage
+
+Data leakage happens when your model accidentally uses future information to predict the past. took several steps to prevent this:
+
+### 1. Time-Based Split
+
+- Training: 2018-2022 (past seasons)
+- Testing: 2023-2024 (future seasons)
+- never train on future data
+
+### 2. Historical Features with shift(1)
+
+All "past" features only use data from BEFORE each race:
+
+```python
+driver_avg_points_past = expanding().mean().shift(1)
+```
+
+This means: "average of all races before this one"
+
+### 3. Constructor Features at Race Level
+
+fixed a subtle bug where teammate results could leak within the same race. Now constructor stats are aggregated at the RACE level first, then expanded over races.
+
+### 4. No Post-Race Features
+
+Features like `position_gain` and `is_podium` are calculated AFTER the race. We don't use them for prediction - only for analysis.
+
+---
+
 ## Why Regression?
 
-I chose **Regression** because our target variable `points` is a continuous number (0, 1, 2, 4, 6, 8, 10, 12, 15, 18, 25).
+We chose **Regression** because our target variable `points` is a continuous number (0, 1, 2, 4, 6, 8, 10, 12, 15, 18, 25, 26).
 
 | Problem Type   | When to Use             | Our Case                     |
 | -------------- | ----------------------- | ---------------------------- |
@@ -156,29 +184,29 @@ Since we want to predict the actual number of points, Regression is the right ch
 
 We didn't just use the raw data. We created new features to help the model:
 
-| Feature                     | What it means                                  |
-| --------------------------- | ---------------------------------------------- |
-| `grid_clean`                | Qualifying position (with unknowns removed)    |
-| `position_gain`             | How many places gained/lost during race        |
-| `is_podium`                 | Did they finish top 3? (1 = yes, 0 = no)       |
-| `driver_avg_points_past`    | Driver's average points in previous races      |
-| `driver_consistency_past`   | How consistent is the driver? (lower = better) |
-| `constructor_strength_past` | Team's average points in previous races        |
+| Feature                     | What it means                                      |
+| --------------------------- | -------------------------------------------------- |
+| `grid_clean`                | Qualifying position (with unknowns removed)        |
+| `position_gain`             | How many places gained/lost during race (EDA only) |
+| `is_podium`                 | Did they finish top 3? (EDA only)                  |
+| `driver_avg_points_past`    | Driver's average points in previous races          |
+| `driver_consistency_past`   | How consistent is the driver? (lower = better)     |
+| `constructor_strength_past` | Team's average points in previous races            |
 
-**Important:** All historical features use only PAST data. future information is never used to predict - that would be cheating (data leakage).
+**Important:** All historical features use only PAST data. We never use future information to predict - that would be cheating (data leakage).
 
 ---
 
 ## Model Results
 
-tested two models and tuned the Decision Tree:
+We tested two models and tuned the Decision Tree:
 
 ### Before Tuning
 
 | Model                   | R²    | MSE   |
 | ----------------------- | ----- | ----- |
-| Linear Regression       | 0.515 | 25.82 |
-| Decision Tree (depth=8) | 0.253 | 39.77 |
+| Linear Regression       | 0.515 | 25.81 |
+| Decision Tree (depth=8) | 0.417 | 31.07 |
 
 Decision Tree was overfitting with max_depth=8!
 
@@ -186,12 +214,33 @@ Decision Tree was overfitting with max_depth=8!
 
 | Model                       | R²        | MSE       |
 | --------------------------- | --------- | --------- |
-| **Decision Tree (depth=3)** | **0.530** | **25.01** |
-| Linear Regression           | 0.515     | 25.82     |
+| **Decision Tree (depth=3)** | **0.565** | **23.18** |
+| Linear Regression           | 0.515     | 25.81     |
 
 **Winner: Decision Tree (max_depth=3)**
 
 Why? A shallower tree (depth=3) doesn't overfit. It captures the main patterns without memorizing noise.
+
+### What the Results Mean
+
+- **R² = 0.565**: Our model explains 56.5% of the variance in race points
+- **MSE = 23.18**: On average, predictions are off by about √23.18 ≈ 4.8 points
+- The remaining ~44% of variance comes from things we don't measure (weather, crashes, strategy, luck)
+
+---
+
+## Feature Importance
+
+The Decision Tree tells us which features matter most:
+
+| Feature                   | Importance |
+| ------------------------- | ---------- |
+| constructor_strength_past | 74.1%      |
+| grid_clean                | 22.0%      |
+| driver_avg_points_past    | 3.9%       |
+| Other features            | <1%        |
+
+**Key Insight:** Team strength (74%) and qualifying (22%) explain almost all the predictions. In F1, the car matters most!
 
 ---
 
@@ -224,9 +273,8 @@ We created these charts (saved in `reports/figures/`):
 ---
 
 1. **Qualifying is everything** - If you don't qualify well, you probably won't score points
-2. **The car matters** - Even the best driver can't win in a slow car
+2. **The car matters most** - Constructor strength is 74% of the model's decisions
 3. **Some tracks are special** - At Monaco you can't overtake, at Monza you can
-4. **Tuning matters** - Decision Tree went from R²=0.25 to R²=0.53 after tuning
-5. **Time-based splits are important** - Random splits can leak future information
-
----
+4. **Tuning matters** - Decision Tree went from R²=0.42 to R²=0.57 after tuning
+5. **Shallow trees generalize better** - max_depth=3 beats max_depth=8
+6. **Data leakage is sneaky** - Even same-race teammate data can leak!
