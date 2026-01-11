@@ -81,7 +81,7 @@ pip install -r requirements.txt
 
 ### Step 2: Get the data
 
-Download F1 data from Kaggle -> kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020  and put the CSV files in `data/raw/`.
+Download F1 data from Kaggle -> (kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020)  and put the CSV files in `data/raw/`.
 
 You need these files:
 
